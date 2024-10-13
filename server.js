@@ -11,7 +11,9 @@ const hpp = require('hpp');
 const helmet = require('helmet');
 const compression = require('compression');
 const userRouter = require('./src/routes/userRoutes');
-const communityRouter = require('./src/routes/communityRouter');
+const communityRouter = require('./src/routes/communityRoutes');
+const commentRouter = require('./src/routes/commentsRoutes');
+const postRouter = require('./src/routes/postRoutes');
 const globalErrorHandler = require('./src/controllers/errorController');
 
 require('express-async-errors');
@@ -75,7 +77,9 @@ mongoose
 
 app.get('/', (req, res) => res.send('Hello World!'));
 app.use('/api/v1/users', userRouter);
+app.use('/api/v1/posts', postRouter);
 app.use('/api/v1/communities', communityRouter);
+app.use('/api/v1/comments', commentRouter);
 
 const port = process.env.PORT ?? 5000;
 

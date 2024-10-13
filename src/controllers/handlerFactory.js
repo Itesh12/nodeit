@@ -2,10 +2,17 @@ require('express-async-errors');
 const AppError = require('../../utils/appError');
 const APIFeatures = require('../../utils/apiFeatures');
 const Community = require('./../models/communityModel');
+const Comment = require('./../models/commentModel');
+const Post = require('./../models/postModel');
 const User = require('./../models/userModel');
 
 exports.getDocuments = (Model) => async (req, res, next) => {
   let query = Model.find();
+
+  // Don't cache communities
+  if (Model.modelName === 'Community') {
+    query = Model.find();
+  }
 
   const features = new APIFeatures(query, req.query)
     .filter()
@@ -15,7 +22,7 @@ exports.getDocuments = (Model) => async (req, res, next) => {
   const documents = await features.query;
 
   if (!documents) {
-    throw new AppError('Documents not found', 404);
+    throw new AppError('documents not found', 404);
   }
 
   res.status(200).json({
@@ -31,7 +38,7 @@ exports.getDocument = (Model) => async (req, res, next) => {
   const document = await Model.findById(req.params.id);
 
   if (!document) {
-    throw new AppError('Document not found', 404);
+    throw new AppError('document not found', 404);
   }
 
   res.status(200).json({
@@ -48,6 +55,8 @@ exports.createDocument = (Model) => async (req, res, next) => {
   let document;
   const { user } = req;
 
+  console.log(req.body);
+
   const communityDoc = await Community.findById(community);
   const bannedUsers = communityDoc?.bannedUsers?.map((userId) =>
     userId.toString()
@@ -57,7 +66,37 @@ exports.createDocument = (Model) => async (req, res, next) => {
     throw new AppError('You are banned from this community', 403);
   }
 
-  // Handle different models like Post or Comment here
+  if (Model.modelName === 'Comment') {
+    const parentDoc =
+      (await Post.findById(parent)) ?? (await Comment.findById(parent));
+
+    if (!parentDoc) throw new Error("Parent doesn't exist");
+    const parentModel = parentDoc?.constructor.modelName;
+
+    document = await Model.create({
+      parentModel,
+      creator: user.id,
+      parent,
+      content,
+      community: parentDoc.community._id,
+    });
+  } else if (Model.modelName === 'Post') {
+    if (!communityDoc) {
+      throw new AppError('Community not found', 404);
+    }
+
+    document = await Model.create({
+      creator: user.id,
+      title,
+      description,
+      mediaURLs,
+      community,
+    });
+  } else {
+    throw new Error('Invalid model name');
+  }
+
+  // clearCache(Model.modelName);
 
   res.status(201).json({
     status: 'success',
@@ -72,7 +111,7 @@ exports.deleteDocument = (Model) => async (req, res, next) => {
 
   const document = await Model.findById(req.params.id);
   if (!document) {
-    throw new AppError('Document not found', 404);
+    throw new AppError('document not found', 404);
   }
 
   const community = await Community.findById(document.community._id);
@@ -89,6 +128,8 @@ exports.deleteDocument = (Model) => async (req, res, next) => {
   }
 
   await Model.findByIdAndDelete(req.params.id);
+
+  // clearCache(Model.modelName);
 
   res.status(204).json({
     status: 'success',
